@@ -15,4 +15,43 @@ A full-featured Discord bot built for a guild-based marketplace server where use
 ---
 
 ## 📁 Project Structure
+├── bot.py / main.py # Main bot logic
+├── keep_alive.py # Optional Flask server (not currently active)
+├── requirements.txt # Project dependencies
+├── .env # Stores secret token
+└── README.md # You're reading it!
+
+
+---
+
+## 🔐 Environment Variables
+
+This project uses a `.env` file to securely manage secrets.
+
+| Key       | Description              |
+|-----------|--------------------------|
+| `TOKEN`   | Your Discord bot token   |
+
+> ⚠️ Never commit your `.env` file or token to GitHub.
+
+---
+
+## 🧠 Technologies Used
+
+- **Python**
+- **discord.py**
+- **Flask** (optional)
+- **GitHub**
+
+---
+
+## 📜 License
+
+This project is open source and free to use under the [MIT License](LICENSE).
+
+---
+
+## 🤝 Contributing
+
+PRs and suggestions welcome! Feel free to fork the repo and improve the bot.
 

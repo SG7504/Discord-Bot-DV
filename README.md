@@ -47,7 +47,7 @@ This project uses a `.env` file to securely manage secrets.
 
 ## 📜 License
 
-This project is open source and free to use under the [MIT License](LICENSE).
+This project is open source and free to use under the [MIT License](https://github.com/SG7504/Discord-Bot-DV/blob/main/LICENSE).
 
 ---
 

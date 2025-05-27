@@ -1,57 +1,100 @@
-# 🐉 Dragon's Vault Discord Bot
+# Dragon's Vault Discord Bot
 
-A full-featured Discord bot built for a guild-based marketplace server where users can act as Customers or Workers. The bot handles role assignment, order requests, ticket creation, admin approval, and transparent order fulfillment.
-
----
-
-## ✨ Features
-
-- 🔧 **Role Selection**: Members choose between `Worker 🟦` and `Customer 🟩` via reaction roles.
-- 📩 **Ticket System**: Customers can open order tickets describing what they need.
-- ✅ **Admin Workflow**: Admins have buttons to Approve, Cancel, or Complete tickets.
-- 🔒 **Secure Payments**: Workers fulfill orders, and customers pay after admin approval.
-- 📜 **Logging**: Every order is logged for transparency in a dedicated admin-only channel.
+A Discord bot for managing customer order tickets with role selection, order placement, approval workflow, and ticket management. Built with `discord.py` and hosted on Render for 24/7 uptime.
 
 ---
 
-## 📁 Project Structure
-├── bot.py / main.py # Main bot logic
-├── keep_alive.py # Optional Flask server (not currently active)
-├── requirements.txt # Project dependencies
-├── .env # Stores secret token
-└── README.md # You're reading it!
+## Features
 
-
----
-
-## 🔐 Environment Variables
-
-This project uses a `.env` file to securely manage secrets.
-
-| Key       | Description              |
-|-----------|--------------------------|
-| `TOKEN`   | Your Discord bot token   |
-
-> ⚠️ Never commit your `.env` file or token to GitHub.
+- Role assignment via reaction (Worker, Customer)
+- Order placement through a button and modal input
+- Admin approval or cancellation of orders
+- Automatic creation of ticket channels for approved orders
+- Ticket controls: cancel and complete
+- Worker price quoting
+- Order logs and order-info channels to track orders
 
 ---
 
-## 🧠 Technologies Used
+## Setup & Deployment
 
-- **Python**
-- **discord.py**
-- **Flask** (optional)
-- **GitHub**
+### Prerequisites
+
+- Python 3.10+
+- Discord Bot Token
+- Discord server with these channels created:
+  - `order-requests`
+  - `order-logs`
+  - `order-info`
+
+### Installation
+
+1. Clone this repo:
+   ```bash
+   git clone https://github.com/yourusername/dragons-vault-bot.git
+   cd dragons-vault-bot
+````
+
+2. Create a `.env` file in the root with:
+
+   ```
+   TOKEN=your_discord_bot_token_here
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Run the bot locally:
+
+   ```bash
+   python bot.py
+   ```
 
 ---
 
-## 📜 License
+## Commands
 
-This project is open source and free to use under the [MIT License](https://github.com/SG7504/Discord-Bot-DV/blob/main/LICENSE).
+| Command          | Description                             | Permission    |
+| ---------------- | --------------------------------------- | ------------- |
+| `!setup_roles`   | Sends role selection message            | Administrator |
+| `!order`         | Sends the "Place Order" button          | Administrator |
+| `!complete`      | Completes and closes the current ticket | Administrator |
+| `!quote <price>` | Worker quotes a price for the order     | Worker role   |
 
 ---
 
-## 🤝 Contributing
+## Hosting on Render
 
-PRs and suggestions welcome! Feel free to fork the repo and improve the bot.
+* Add `Flask` as dependency (in `requirements.txt`) to keep the bot process alive.
+* Set up a **Web Service** on Render.
+* Use the start command: `python bot.py`
+* Create environment variable `TOKEN` in Render’s dashboard.
+* Your bot will run 24/7 with a free tier Flask webserver to prevent sleeping.
 
+---
+
+## Notes
+
+* Ensure the channels `order-requests`, `order-logs`, and `order-info` exist in your Discord server.
+* Bot requires `Administrator` role to manage roles and tickets properly.
+* Keep your `.env` file private and include `.env` in `.gitignore`.
+
+---
+
+## License
+
+MIT License © YourName
+
+---
+
+## Contact
+
+For questions or support, open an issue or contact me via Discord.
+
+```
+
+If you want, I can help you customize it further or add badges, images, or other sections!
+```

@@ -1,166 +1,274 @@
-from keep_alive import keep_alive
-keep_alive()
+from dotenv import load_dotenv
+load_dotenv()
 
 import discord
 from discord.ext import commands
+from discord.ui import Button, View, Modal, TextInput
+import asyncio
+from datetime import datetime
 import os
+import traceback
+from keep_alive import keep_alive
 
-# Enable message content intent for commands to work
+# Start the keep_alive server
+keep_alive()
+
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # needed for role assignment and reaction roles
+intents.guilds = True
+intents.members = True
+intents.reactions = True
 
-# Set command prefix and intents
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Bot is ready
+ROLE_OPTIONS = {
+    "🟦": "Worker",
+    "🟩": "Customer"
+}
+
+TICKET_REQUEST_CHANNEL = "order-requests"
+TICKET_LOG_CHANNEL = "order-logs"
+TICKET_CATEGORY_NAME = "Tickets"
+ORDER_INFO_CHANNEL_NAME = "order-info"
+
+# === BOT STARTUP ===
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user.name}")
+    print(f"✅ Dragon's Vault is online as {bot.user}")
 
-# Example command
+# === ROLE SELECTION MESSAGE ===
 @bot.command()
-async def ping(ctx):
-    await ctx.send("Pong!")
-
-# Admin check decorator
-def is_admin():
-    def predicate(ctx):
-        return ctx.author.guild_permissions.administrator
-    return commands.check(predicate)
-
-# Command: setup_roles - sends a reaction role message for Worker/Customer roles
-@bot.command()
-@is_admin()
 async def setup_roles(ctx):
     embed = discord.Embed(
-        title="Choose your role",
-        description="React to get your role:\n"
-                    "🛠️ for Worker\n"
-                    "👤 for Customer"
+        title="Choose Your Role",
+        description="React to get a role:\n\n🟦 - Worker\n🟩 - Customer",
+        color=discord.Color.gold()
     )
-    message = await ctx.send(embed=embed)
-    await message.add_reaction("🛠️")
-    await message.add_reaction("👤")
+    msg = await ctx.send(embed=embed)
+    for emoji in ROLE_OPTIONS:
+        await msg.add_reaction(emoji)
+    bot.role_msg_id = msg.id
+    await ctx.send("✅ Reaction role message set up!")
 
-    # Save message ID somewhere if needed for persistent reaction role handling
-
-# Reaction role handling
 @bot.event
 async def on_raw_reaction_add(payload):
-    if payload.member.bot:
+    if payload.user_id == bot.user.id:
+        return
+    if payload.message_id != getattr(bot, 'role_msg_id', None):
         return
 
     guild = bot.get_guild(payload.guild_id)
-    if guild is None:
-        return
+    member = guild.get_member(payload.user_id)
+    role_name = ROLE_OPTIONS.get(str(payload.emoji))
 
-    # Customize with your role IDs or role names
-    worker_role = discord.utils.get(guild.roles, name="Worker")
-    customer_role = discord.utils.get(guild.roles, name="Customer")
-
-    if payload.emoji.name == "🛠️" and worker_role:
-        await payload.member.add_roles(worker_role)
-    elif payload.emoji.name == "👤" and customer_role:
-        await payload.member.add_roles(customer_role)
+    if role_name:
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            role = await guild.create_role(name=role_name)
+        if role not in member.roles:
+            await member.add_roles(role)
+            print(f"✅ Assigned {role.name} to {member.name}")
 
 @bot.event
 async def on_raw_reaction_remove(payload):
+    if payload.user_id == bot.user.id:
+        return
+    if payload.message_id != getattr(bot, 'role_msg_id', None):
+        return
+
     guild = bot.get_guild(payload.guild_id)
-    if guild is None:
-        return
-
     member = guild.get_member(payload.user_id)
-    if member is None or member.bot:
+    role_name = ROLE_OPTIONS.get(str(payload.emoji))
+
+    if role_name and member:
+        role = discord.utils.get(guild.roles, name=role_name)
+        if role in member.roles:
+            await member.remove_roles(role)
+            print(f"✅ Removed {role.name} from {member.name}")
+
+# === INTERFACE WITH 'PLACE ORDER' BUTTON ===
+@bot.command(name="order")
+@commands.has_permissions(administrator=True)
+async def show_order_button(ctx):
+    embed = discord.Embed(
+        title="Welcome to Dragon's Vault",
+        description="Hello customers! Click the **Place Order** button if you'd like to request a service.",
+        color=discord.Color.blue()
+    )
+
+    class OrderInterface(View):
+        @discord.ui.button(label="Place Order", style=discord.ButtonStyle.primary, emoji="📩")
+        async def place_order(self, interaction: discord.Interaction, button: Button):
+            class OrderModal(Modal, title="Place Your Order"):
+                order_details = TextInput(label="Describe what you need", style=discord.TextStyle.paragraph)
+
+                async def on_submit(self, modal_interaction: discord.Interaction):
+                    await modal_interaction.response.send_message("✅ Your order was submitted for approval!", ephemeral=True)
+                    await ticket(modal_interaction, self.order_details.value)
+
+                async def on_cancel(self, modal_interaction: discord.Interaction):
+                    await modal_interaction.response.send_message("❌ Order canceled.", ephemeral=True)
+
+            await interaction.response.send_modal(OrderModal())
+
+    await ctx.send(embed=embed, view=OrderInterface())
+
+# === TICKET COMMAND ===
+async def ticket(interaction, order_text):
+    try:
+        customer = interaction.user
+        guild = interaction.guild
+        log_channel = discord.utils.get(guild.text_channels, name=TICKET_REQUEST_CHANNEL)
+        archive_channel = discord.utils.get(guild.text_channels, name=TICKET_LOG_CHANNEL)
+        info_channel = discord.utils.get(guild.text_channels, name=ORDER_INFO_CHANNEL_NAME)
+
+        if not log_channel or not archive_channel or not info_channel:
+            await interaction.followup.send(f"⚠️ Required channels are missing.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="New Order Request",
+            description=f"{customer.mention} submitted an order:\n\n```{order_text}```",
+            color=discord.Color.orange(),
+            timestamp=datetime.utcnow()
+        )
+
+        class ApprovalButtons(View):
+            def __init__(self, customer, order_text):
+                super().__init__(timeout=None)
+                self.customer = customer
+                self.order_text = order_text
+
+            @discord.ui.button(label="Approve", style=discord.ButtonStyle.green, emoji="✅")
+            async def approve(self, interaction: discord.Interaction, button: Button):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+                    return
+
+                category = discord.utils.get(guild.categories, name=TICKET_CATEGORY_NAME)
+                if not category:
+                    category = await guild.create_category(TICKET_CATEGORY_NAME)
+
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    discord.utils.get(guild.roles, name="Worker"): discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    discord.utils.get(guild.roles, name="Administrator"): discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    guild.owner: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
+
+                # Sanitize channel name
+                safe_order_text = ''.join(c if c.isalnum() or c=='-' else '-' for c in self.order_text.lower().strip().replace(' ', '-'))
+                channel_name = f"ticket-{safe_order_text[:25]}"
+
+                channel = await guild.create_text_channel(
+                    name=channel_name,
+                    overwrites=overwrites,
+                    category=category
+                )
+
+                status_embed = discord.Embed(
+                    title="🟠 Order In Progress",
+                    description=f"**Order:** `{self.order_text}`\n**Customer:** {self.customer.mention}\n**Status:** In Progress",
+                    color=discord.Color.orange()
+                )
+                await info_channel.send(embed=status_embed)
+
+                class TicketControls(View):
+                    def __init__(self):
+                        super().__init__(timeout=None)
+
+                    @discord.ui.button(label="Cancel Ticket", style=discord.ButtonStyle.danger, emoji="🗑️")
+                    async def cancel_ticket(self, interaction: discord.Interaction, button: Button):
+                        is_admin = interaction.user.guild_permissions.administrator
+                        is_owner = interaction.user.id == guild.owner_id
+                        if not is_admin and not is_owner:
+                            await interaction.response.send_message("❌ Only admins or the owner can cancel.", ephemeral=True)
+                            return
+
+                        await interaction.channel.send("❌ Ticket canceled. Closing in 5 seconds...")
+                        await asyncio.sleep(5)
+                        await interaction.channel.delete()
+
+                        cancel_embed = discord.Embed(
+                            title="🗑️ Ticket Canceled",
+                            description=f"Canceled by: {interaction.user.mention}\nOrder: `{self.order_text}`",
+                            color=discord.Color.red(),
+                            timestamp=datetime.utcnow()
+                        )
+                        await archive_channel.send(embed=cancel_embed)
+
+                await channel.send(
+                    f"🎫 **Order Details:**\n```{self.order_text}```\n"
+                    "To claim this order, type 'order claimed' and specify the amount you can handle.",
+                    view=TicketControls()
+                )
+                await interaction.response.send_message(f"✅ Approved. Ticket created: {channel.mention}", ephemeral=True)
+
+                log_embed = discord.Embed(
+                    title="✅ Ticket Approved",
+                    description=f"Customer: {self.customer.mention}\nTicket: {channel.mention}",
+                    color=discord.Color.green(),
+                    timestamp=datetime.utcnow()
+                )
+                await archive_channel.send(embed=log_embed)
+
+            @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, emoji="❌")
+            async def cancel(self, interaction: discord.Interaction, button: Button):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+                    return
+
+                await self.customer.send("❌ Your order request has been denied by an admin.")
+                await interaction.response.send_message("🚫 Request canceled.", ephemeral=True)
+
+                log_embed = discord.Embed(
+                    title="❌ Ticket Canceled",
+                    description=f"Customer: {self.customer.mention}\nCanceled by: {interaction.user.mention}",
+                    color=discord.Color.red(),
+                    timestamp=datetime.utcnow()
+                )
+                await archive_channel.send(embed=log_embed)
+
+        await log_channel.send(embed=embed, view=ApprovalButtons(customer, order_text))
+
+    except Exception:
+        print(f"❌ Error in ticket():\n{traceback.format_exc()}")
+        try:
+            await interaction.followup.send("⚠️ An unexpected error occurred. Please contact an admin.", ephemeral=True)
+        except:
+            pass
+
+# === COMPLETE TICKET ===
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def complete(ctx):
+    archive_channel = discord.utils.get(ctx.guild.text_channels, name=TICKET_LOG_CHANNEL)
+    if not archive_channel:
+        await ctx.send("⚠️ Could not find `order-logs` channel.")
         return
 
-    worker_role = discord.utils.get(guild.roles, name="Worker")
-    customer_role = discord.utils.get(guild.roles, name="Customer")
+    log_embed = discord.Embed(
+        title="✔️ Ticket Completed",
+        description=f"Channel: `{ctx.channel.name}`\nCompleted by: {ctx.author.mention}",
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow()
+    )
+    await archive_channel.send(embed=log_embed)
 
-    if payload.emoji.name == "🛠️" and worker_role:
-        await member.remove_roles(worker_role)
-    elif payload.emoji.name == "👤" and customer_role:
-        await member.remove_roles(customer_role)
-
-# Command: order - sends a message with a Place Order button (admin only)
-@bot.command()
-@is_admin()
-async def order(ctx):
-    embed = discord.Embed(title="Place an Order", description="Click the button below to place a new order!")
-    button = discord.ui.Button(label="Place Order", style=discord.ButtonStyle.green)
-
-    async def button_callback(interaction):
-        # You can customize ticket creation or order handling here
-        guild = ctx.guild
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        order_channel = await guild.create_text_channel(f"order-{interaction.user.name}", overwrites=overwrites)
-        await interaction.response.send_message(f"Order channel created: {order_channel.mention}", ephemeral=True)
-
-    button.callback = button_callback
-    view = discord.ui.View()
-    view.add_item(button)
-
-    await ctx.send(embed=embed, view=view)
-
-# Command: complete - marks current ticket/order channel complete and closes it (admin only)
-@bot.command()
-@is_admin()
-async def complete(ctx):
-    await ctx.send("Marking ticket as complete and closing the channel...")
+    await ctx.send("✅ Ticket completed. Closing in 10 seconds...")
+    await asyncio.sleep(10)
     await ctx.channel.delete()
 
-# Existing admin commands from before
-
-# Admin command to close a ticket (alias to complete)
+# === WORKER QUOTES PRICE ===
 @bot.command()
-@is_admin()
-async def ticket_close(ctx):
-    await ctx.send("Closing this ticket...")
-    await ctx.channel.delete()
+@commands.has_role("Worker")
+async def quote(ctx, *, price: str):
+    await ctx.send(f"💰 Quoted price: **{price}**. Customer, please confirm payment to an admin.")
 
-# Admin command to add a role to a user
-@bot.command()
-@is_admin()
-async def role_add(ctx, member: discord.Member, role: discord.Role):
-    await member.add_roles(role)
-    await ctx.send(f"Added role {role.name} to {member.mention}")
-
-# Admin command to remove a role from a user
-@bot.command()
-@is_admin()
-async def role_remove(ctx, member: discord.Member, role: discord.Role):
-    await member.remove_roles(role)
-    await ctx.send(f"Removed role {role.name} from {member.mention}")
-
-# Admin command to send ticket creation panel
-@bot.command()
-@is_admin()
-async def ticket_panel(ctx):
-    embed = discord.Embed(title="Support Tickets", description="Click the button below to create a ticket!")
-    button = discord.ui.Button(label="Create Ticket", style=discord.ButtonStyle.primary)
-
-    async def button_callback(interaction):
-        guild = ctx.guild
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites)
-        await interaction.response.send_message(f"Ticket created: {ticket_channel.mention}", ephemeral=True)
-
-    button.callback = button_callback
-    view = discord.ui.View()
-    view.add_item(button)
-
-    await ctx.send(embed=embed, view=view)
-
-# Run bot using token from environment variable
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-
+# === RUN BOT ===
+TOKEN = os.getenv("TOKEN")
 if not TOKEN:
-    raise Exception("❌ DISCORD_BOT_TOKEN not found in environment variables!")
+    raise Exception("❌ TOKEN environment variable not set!")
 
 bot.run(TOKEN)

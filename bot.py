@@ -271,4 +271,6 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise Exception("❌ TOKEN environment variable not set!")
 
+keep_alive()  # starts the web server to keep the bot alive
 bot.run(TOKEN)
+

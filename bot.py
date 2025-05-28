@@ -1,20 +1,33 @@
-# keep_alive.py
+# bot.py
 
-from flask import Flask
-from threading import Thread
+from keep_alive import keep_alive
+keep_alive()
+
+import discord
+from discord.ext import commands
 import os
 
-app = Flask(__name__)
+# Enable message content intent for commands to work
+intents = discord.Intents.default()
+intents.message_content = True
 
-@app.route('/')
-def home():
-    return "Bot is alive!"
+# Set command prefix and intents
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-def run():
-    # Use PORT from environment variable if provided by Render
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+# Bot is ready
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user.name}")
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+# Example command
+@bot.command()
+async def ping(ctx):
+    await ctx.send("Pong!")
+
+# Run bot using token from environment variable
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+
+if not TOKEN:
+    raise Exception("❌ DISCORD_BOT_TOKEN not found in environment variables!")
+
+bot.run(TOKEN)

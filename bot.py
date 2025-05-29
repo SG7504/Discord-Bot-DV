@@ -1,5 +1,7 @@
+from keep_alive import keep_alive
 from dotenv import load_dotenv
 load_dotenv()
+
 import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
@@ -8,6 +10,16 @@ from datetime import datetime
 import os
 import traceback
 
+# Load environment variables
+TOKEN = os.getenv("TOKEN")
+TICKET_REQUEST_CHANNEL_ID = int(os.getenv("TICKET_REQUEST_CHANNEL_ID"))
+TICKET_LOG_CHANNEL_ID = int(os.getenv("TICKET_LOG_CHANNEL_ID"))
+ORDER_INFO_CHANNEL_ID = int(os.getenv("ORDER_INFO_CHANNEL_ID"))
+PLACE_ORDER_CHANNEL_ID = int(os.getenv("PLACE_ORDER_CHANNEL_ID"))
+SELF_ROLE_CHANNEL_ID = int(os.getenv("SELF_ROLE_CHANNEL_ID"))
+TICKET_CATEGORY_ID = int(os.getenv("TICKET_CATEGORY_ID"))
+
+# Intents and bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -21,22 +33,12 @@ ROLE_OPTIONS = {
     "🟩": "Customer"
 }
 
-TICKET_REQUEST_CHANNEL_ID = 1370319093487632435
-TICKET_LOG_CHANNEL_ID = 1370319422430122024
-ORDER_INFO_CHANNEL_ID = 1376818171696381952
-PLACE_ORDER_CHANNEL_ID = 1368081952913096815
-SELF_ROLE_CHANNEL_ID = 1368958759115821278
-TICKET_CATEGORY_ID = 1376843550481715230
-
 @bot.event
 async def on_ready():
     print(f"✅ Dragon's Vault is online as {bot.user}")
 
 @bot.command()
 async def setup_roles(ctx):
-    if ctx.channel.id != SELF_ROLE_CHANNEL_ID:
-        return
-
     embed = discord.Embed(
         title="Choose Your Role",
         description="React to get a role:\n\n🟦 - Worker\n🟩 - Customer",
@@ -68,9 +70,6 @@ async def on_raw_reaction_add(payload):
 @bot.command(name="order")
 @commands.has_permissions(administrator=True)
 async def show_order_button(ctx):
-    if ctx.channel.id != PLACE_ORDER_CHANNEL_ID:
-        return
-
     embed = discord.Embed(
         title="Welcome to Dragon's Vault",
         description="Hello customers! Click the **Place Order** button if you'd like to request a service.",
@@ -101,10 +100,9 @@ async def ticket(interaction, order_text):
         log_channel = guild.get_channel(TICKET_REQUEST_CHANNEL_ID)
         archive_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
         info_channel = guild.get_channel(ORDER_INFO_CHANNEL_ID)
-        category = guild.get_channel(TICKET_CATEGORY_ID)
 
-        if not log_channel or not archive_channel or not info_channel or not category:
-            await interaction.followup.send(f"⚠️ Required channels or category are missing.", ephemeral=True)
+        if not log_channel or not archive_channel or not info_channel:
+            await interaction.followup.send("⚠️ Required channels are missing.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -125,6 +123,10 @@ async def ticket(interaction, order_text):
                 if not discord.utils.get(interaction.user.roles, name="Administrator"):
                     await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
                     return
+
+                category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
+                if not category:
+                    category = await guild.create_category("Tickets")
 
                 overwrites = {
                     guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -174,7 +176,7 @@ async def ticket(interaction, order_text):
 
                 await channel.send(
                     f"🎫 **Order Details:**\n```{self.order_text}```\n"
-                    "To claim this order, simply type 'order claimed' and the amount you can handle.",
+                    "To claim this order simple type 'order claimed' and amount which you can handle",
                     view=TicketControls()
                 )
                 await interaction.response.send_message(f"✅ Approved. Ticket created: {channel.mention}", ephemeral=True)
@@ -218,7 +220,7 @@ async def ticket(interaction, order_text):
 async def complete(ctx):
     archive_channel = ctx.guild.get_channel(TICKET_LOG_CHANNEL_ID)
     if not archive_channel:
-        await ctx.send("⚠️ Could not find `order-logs` channel.")
+        await ctx.send("⚠️ Could not find order-logs channel.")
         return
 
     log_embed = discord.Embed(
@@ -237,5 +239,5 @@ async def complete(ctx):
 @commands.has_role("Worker")
 async def quote(ctx, *, price: str):
     await ctx.send(f"💰 Quoted price: **{price}**. Customer, please confirm payment to an admin.")
-
-bot.run(os.getenv("TOKEN"))
+keep_alive()
+bot.run(TOKEN)

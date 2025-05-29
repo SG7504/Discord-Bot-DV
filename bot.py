@@ -97,9 +97,9 @@ async def ticket(interaction, order_text):
     try:
         customer = interaction.user
         guild = interaction.guild
-        log_channel = guild.get_channel(TICKET_REQUEST_CHANNEL_ID)
-        archive_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
-        info_channel = guild.get_channel(ORDER_INFO_CHANNEL_ID)
+        log_channel = bot.get_channel(TICKET_REQUEST_CHANNEL_ID)
+        archive_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
+        info_channel = bot.get_channel(ORDER_INFO_CHANNEL_ID)
 
         if not log_channel or not archive_channel or not info_channel:
             await interaction.followup.send("⚠️ Required channels are missing.", ephemeral=True)
@@ -124,7 +124,7 @@ async def ticket(interaction, order_text):
                     await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
                     return
 
-                category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
+                category = bot.get_channel(TICKET_CATEGORY_ID)
                 if not category:
                     category = await guild.create_category("Tickets")
 
@@ -218,7 +218,7 @@ async def ticket(interaction, order_text):
 @bot.command()
 @commands.has_role("Administrator")
 async def complete(ctx):
-    archive_channel = ctx.guild.get_channel(TICKET_LOG_CHANNEL_ID)
+    archive_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
     if not archive_channel:
         await ctx.send("⚠️ Could not find order-logs channel.")
         return
@@ -239,5 +239,6 @@ async def complete(ctx):
 @commands.has_role("Worker")
 async def quote(ctx, *, price: str):
     await ctx.send(f"💰 Quoted price: **{price}**. Customer, please confirm payment to an admin.")
+
 keep_alive()
 bot.run(TOKEN)

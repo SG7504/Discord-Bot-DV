@@ -1,7 +1,5 @@
-from keep_alive import keep_alive
 from dotenv import load_dotenv
 load_dotenv()
-
 import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
@@ -10,16 +8,6 @@ from datetime import datetime
 import os
 import traceback
 
-# Load environment variables
-TOKEN = os.getenv("TOKEN")
-TICKET_REQUEST_CHANNEL_ID = int(os.getenv("TICKET_REQUEST_CHANNEL_ID"))
-TICKET_LOG_CHANNEL_ID = int(os.getenv("TICKET_LOG_CHANNEL_ID"))
-ORDER_INFO_CHANNEL_ID = int(os.getenv("ORDER_INFO_CHANNEL_ID"))
-PLACE_ORDER_CHANNEL_ID = int(os.getenv("PLACE_ORDER_CHANNEL_ID"))
-SELF_ROLE_CHANNEL_ID = int(os.getenv("SELF_ROLE_CHANNEL_ID"))
-TICKET_CATEGORY_ID = int(os.getenv("TICKET_CATEGORY_ID"))
-
-# Intents and bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -33,10 +21,20 @@ ROLE_OPTIONS = {
     "🟩": "Customer"
 }
 
+# Use IDs instead of names
+TICKET_CATEGORY_ID = 1376843550481715230
+TICKET_REQUEST_CHANNEL_ID = 1370319093487632435
+TICKET_LOG_CHANNEL_ID = 1370319422430122024
+ORDER_INFO_CHANNEL_ID = 1376818171696381952
+PLACE_ORDER_CHANNEL_ID = 1368081952913096815
+SELF_ROLE_CHANNEL_ID = 1368958759115821278
+
+# === BOT STARTUP ===
 @bot.event
 async def on_ready():
     print(f"✅ Dragon's Vault is online as {bot.user}")
 
+# === ROLE SELECTION MESSAGE ===
 @bot.command()
 async def setup_roles(ctx):
     embed = discord.Embed(
@@ -67,6 +65,7 @@ async def on_raw_reaction_add(payload):
         await member.add_roles(role)
         print(f"✅ Assigned {role.name} to {member.name}")
 
+# === INTERFACE WITH 'PLACE ORDER' BUTTON ===
 @bot.command(name="order")
 @commands.has_permissions(administrator=True)
 async def show_order_button(ctx):
@@ -93,16 +92,18 @@ async def show_order_button(ctx):
 
     await ctx.send(embed=embed, view=OrderInterface())
 
+# === TICKET COMMAND ===
 async def ticket(interaction, order_text):
     try:
         customer = interaction.user
         guild = interaction.guild
-        log_channel = bot.get_channel(TICKET_REQUEST_CHANNEL_ID)
-        archive_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
-        info_channel = bot.get_channel(ORDER_INFO_CHANNEL_ID)
+        log_channel = guild.get_channel(TICKET_REQUEST_CHANNEL_ID)
+        archive_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
+        info_channel = guild.get_channel(ORDER_INFO_CHANNEL_ID)
+        category = guild.get_channel(TICKET_CATEGORY_ID)  # Category ID
 
         if not log_channel or not archive_channel or not info_channel:
-            await interaction.followup.send("⚠️ Required channels are missing.", ephemeral=True)
+            await interaction.followup.send(f"⚠️ Required channels are missing.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -124,8 +125,9 @@ async def ticket(interaction, order_text):
                     await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
                     return
 
-                category = bot.get_channel(TICKET_CATEGORY_ID)
-                if not category:
+                # Use the category from ID or create if not found
+                nonlocal category
+                if category is None:
                     category = await guild.create_category("Tickets")
 
                 overwrites = {
@@ -215,12 +217,13 @@ async def ticket(interaction, order_text):
         except:
             pass
 
+# === COMPLETE TICKET ===
 @bot.command()
 @commands.has_role("Administrator")
 async def complete(ctx):
-    archive_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
+    archive_channel = ctx.guild.get_channel(TICKET_LOG_CHANNEL_ID)
     if not archive_channel:
-        await ctx.send("⚠️ Could not find order-logs channel.")
+        await ctx.send("⚠️ Could not find `order-logs` channel.")
         return
 
     log_embed = discord.Embed(
@@ -235,10 +238,11 @@ async def complete(ctx):
     await asyncio.sleep(10)
     await ctx.channel.delete()
 
+# === WORKER QUOTES PRICE ===
 @bot.command()
 @commands.has_role("Worker")
 async def quote(ctx, *, price: str):
     await ctx.send(f"💰 Quoted price: **{price}**. Customer, please confirm payment to an admin.")
 
-keep_alive()
-bot.run(TOKEN)
+# === RUN BOT ===
+bot.run(os.getenv("TOKEN"))

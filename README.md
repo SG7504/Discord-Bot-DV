@@ -86,13 +86,14 @@ A Discord bot for managing customer order tickets with role selection, order pla
 
 ## License
 
-MIT License © YourName
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+
 
 ---
 
 ## Contact
 
-For questions or support, open an issue or contact me via Discord.
+For questions or support, open an issue or contact me.
 
 ```
 
